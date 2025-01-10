@@ -168,7 +168,7 @@ function noise(se::CompactF1ASourceElement, obs::AbstractAcousticObserver)
 end
 
 """
-    common_obs_time(apth::AbstractArray{<:F1AOutput}, period, n, axis=1)
+    common_obs_time(apth::AbstractArray{<:F1AOutput}, period, n, axis=1; ksmax_hardness=30/period)
 
 Return a suitable time range for the collection of F1A acoustic pressures in `apth`.
 
@@ -176,8 +176,11 @@ The time range will begin near the latest start time of the acoustic pressures
 in `apth`, and be an `AbstractVector` (really a `StepRangeLen`) of size `n` and
 of time length `period`. `axis` indicates which axis of `apth` the time for a
 source varies.
+
+`ksmax_hardness` is the value for the `hardness` argument passed to `FLOWMath.ksmax`, which is used to find the beginning of the common observer time returned by `common_obs_time`.
+A larger value will better approximate the exact maximum.
 """
-function common_obs_time(apth, period, n, axis=1)
+function common_obs_time(apth, period, n, axis=1; ksmax_hardness=30/period)
     # Make a single field struct array that behaves like a time array. 4%-6%
     # faster than creating the array with getproperty.
     t_obs = mapview(:t, apth)
@@ -186,7 +189,8 @@ function common_obs_time(apth, period, n, axis=1)
     t_starts = selectdim(t_obs, axis, 1)
 
     # Find the latest first time.
-    t_common_start = ksmax(t_starts, 30/period)
+    t_common_start = ksmax(t_starts, ksmax_hardness)
+    t_common_start_exact = maximum(t_starts)
 
     # Get the common observer time.
     dt = period/n
@@ -233,17 +237,20 @@ function F1APressureTimeHistory(n, dt, t0)
 end
 
 """
-    F1APressureTimeHistory(apth::AbstractArray{<:F1AOutput}, period::AbstractFloat, n::Integer, axis::Integer=1)
+    F1APressureTimeHistory(apth::AbstractArray{<:F1AOutput}, period::AbstractFloat, n::Integer, axis::Integer=1; ksmax_hardness=30/period)
 
 Construct an `F1APressureTimeHistory` `struct` suitable for containing an acoustic prediction from an array of `F1AOutput` `struct`.
 
 The elapsed time and length of the returned `F1APressureTimeHistory` will be
 `period` and `n`, respectively. `axis` indicates which axis the `apth` `struct`s
 time varies. (`period`, `n`, `axis` are passed to [`common_obs_time`](@ref).)
+
+`ksmax_hardness` is the value for the `hardness` argument passed to `FLOWMath.ksmax`, which is used to find the beginning of the common observer time returned by `common_obs_time`.
+A larger value will better approximate the exact maximum.
 """
-function F1APressureTimeHistory(apth::AbstractArray{<:F1AOutput}, period, n, axis=1)
+function F1APressureTimeHistory(apth::AbstractArray{<:F1AOutput}, period, n, axis=1; ksmax_hardness=30/period)
     # Get the common observer time.
-    t_common = common_obs_time(apth, period, n, axis)
+    t_common = common_obs_time(apth, period, n, axis; ksmax_hardness)
 
     # Allocate output arrays.
     T = typeof(first(apth).p_m)
@@ -333,17 +340,20 @@ function combine!(apth_out, apth, time_axis; f_interp=akima)
 end
 
 """
-    combine(apth::AbstractArray{<:F1AOutput}, period::AbstractFloat, n::Integer, time_axis=1; f_interp=akima)
+    combine(apth::AbstractArray{<:F1AOutput}, period::AbstractFloat, n::Integer, time_axis=1; f_interp=akima, ksmax_hardness=30/period)
 
 Combine the acoustic pressures of multiple sources (`apth`) into a single acoustic pressure time history on a time grid of size `n` extending over time length `period`.
 
 `time_axis` is an integer indicating the time_axis of the `apth` array along which time varies.
 For example, if `time_axis == 1` and `apth` is a three-dimensional array, then `apth[:, i, j]` would be the `F1AOutput` objects of the `i`, `j` source element for all time.
 But if `time_axis == 3`, then `apth[i, j, :]` would be the `F1AOutput` objects of the `i`, `j` source element for all time.
+
+`ksmax_hardness` is the value for the `hardness` argument passed to `FLOWMath.ksmax`, which is used to find the beginning of the common observer time returned by `common_obs_time`.
+A larger value will better approximate the exact maximum.
 """
-function combine(apth, period, n::Integer, axis::Integer=1; f_interp=akima)
+function combine(apth, period, n::Integer, axis::Integer=1; f_interp=akima, ksmax_hardness=30/period)
     # Get the common observer time.
-    t_common = common_obs_time(apth, period, n, axis)
+    t_common = common_obs_time(apth, period, n, axis; ksmax_hardness)
 
     # Construct a julienned array that will give me the time history of each source when we iterate over it.
     alongs = (d == axis ? JuliennedArrays.True() : JuliennedArrays.False() for d in 1:ndims(apth))
@@ -352,12 +362,18 @@ function combine(apth, period, n::Integer, axis::Integer=1; f_interp=akima)
     p_m_interp = mapreduce(+, apth_ja) do p
         t_obs = mapview(:t, p)
         p_m = mapview(:p_m, p)
+        # Check that we're not extrapolating.
+        @assert first(t_common) > first(t_obs)
+        @assert last(t_common) < last(t_obs)
         out = f_interp(t_obs, p_m, t_common)
         return out
     end
 
     p_d_interp = mapreduce(+, apth_ja) do p
         t_obs = mapview(:t, p)
+        # Check that we're not extrapolating.
+        @assert first(t_common) > first(t_obs)
+        @assert last(t_common) < last(t_obs)
         p_d = mapview(:p_d, p)
         out = f_interp(t_obs, p_d, t_common)
         return out
