@@ -240,17 +240,17 @@ function common_obs_time(apth, period, n, axis=1)
     return t_common
 end
 
-struct F1APressureTimeHistory{IsEven,Tp_m,Tp_d,Tdt,Tt0} <: AcousticMetrics.AbstractPressureTimeHistory{IsEven}
+struct F1APressureTimeHistory{IsEven,Tel,Tp_m,Tp_d,Tdt,Tt0} <: AcousticMetrics.AbstractPressureTimeHistory{IsEven,Tel}
     p_m::Tp_m
     p_d::Tp_d
     dt::Tdt
     t0::Tt0
-    function F1APressureTimeHistory{IsEven}(p_m, p_d, dt, t0) where {IsEven}
+    function F1APressureTimeHistory{IsEven}(p_m::AbstractVector{Tel}, p_d::AbstractVector{Tel}, dt, t0) where {IsEven,Tel}
         n_p_m = length(p_m)
         n_p_d = length(p_d)
         n_p_m == n_p_d || throw(ArgumentError("length(p_m) is not the same as length(p_d)"))
         iseven(n_p_m) == IsEven || throw(ArgumentError("IsEven is not consistent with length(p_m) and length(p_d)"))
-        return new{IsEven, typeof(p_m), typeof(p_d), typeof(dt), typeof(t0)}(p_m, p_d, dt, t0)
+        return new{IsEven, Tel, typeof(p_m), typeof(p_d), typeof(dt), typeof(t0)}(p_m, p_d, dt, t0)
     end
 end
 
