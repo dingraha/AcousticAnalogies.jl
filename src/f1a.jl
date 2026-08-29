@@ -102,15 +102,75 @@ This can be done easily with the transformations provided by the `KinematicCoord
 function CompactF1ASourceElement(ρ0, c0, r, θ, Δr, Λ, fn, fndot, fr, frdot, fc, fcdot, τ)
     s, c = sincos(θ)
     y0dot = @SVector [0, r*c, r*s]
-    T = eltype(y0dot)
-    y1dot = @SVector zeros(T, 3)
-    y2dot = @SVector zeros(T, 3)
-    y3dot = @SVector zeros(T, 3)
+    Ty = eltype(y0dot)
+    y1dot = @SVector zeros(Ty, 3)
+    y2dot = @SVector zeros(Ty, 3)
+    y3dot = @SVector zeros(Ty, 3)
     f0dot = @SVector [fn, c*fr - s*fc, s*fr + c*fc]
     f1dot = @SVector [fndot, c*frdot - s*fcdot, s*frdot + c*fcdot]
     span_uvec = @SVector [0, c, s]
 
     return CompactF1ASourceElement(ρ0, c0, Δr, Λ, y0dot, y1dot, y2dot, y3dot, f0dot, f1dot, τ, span_uvec)
+end
+
+struct ImpermeableNonCompactF1ASourceElement{
+    Tρ0,Tc0,Ty0dot,Ty1dot,Ty2dot,TdA,Tnhat,Tnhatdot,Tf0dot,Tf1dot,Tτ
+} <: AbstractNonCompactSourceElement
+    # Density.
+    ρ0::Tρ0
+    # Speed of sound.
+    c0::Tc0
+    # Source position and its time derivatives.
+    y0dot::Ty0dot
+    y1dot::Ty1dot
+    y2dot::Ty2dot
+
+    # Surface area of element
+    dA::TdA
+
+    # Unit vector normal to the surface, pointing out, and its time derivative.
+    nhat::Tnhat
+    nhatdot::Tnhatdot
+
+    # Load per unit area *on the fluid*, and its time derivative.
+    f0dot::Tf0dot
+    f1dot::Tf1dot
+
+    # Source time.
+    τ::Tτ
+end
+
+function ImpermeableNonCompactF1ASourceElement(ρ0, c0, y_1, y_2, y_3, dA, nhat_1, nhat_2, nhat_3, f_1, f_2, f_3, τ)
+    y0dot = @SVector [y_1, y_2, y_3]
+    Ty = eltype(y0dot)
+    y1dot = @SVector zeros(Ty, 3)
+    y2dot = @SVector zeros(Ty, 3)
+
+    nhat = @SVector [nhat_1, nhat_2, nhat_3]
+    Tnhat = eltype(nhat)
+    nhatdot = @SVector zeros(Tnhat, 3)
+
+    f0dot = @SVector [f_1, f_2, f_3]
+    Tf = eltype(f0dot)
+    f1dot = @SVector zeros(Tf, 3)
+
+    return ImpermeableNonCompactF1ASourceElement(ρ0, c0, y0dot, y1dot, y2dot, dA, nhat, nhatdot, f0dot, f1dot, τ)
+end
+
+function ImpermeableNonCompactF1ASourceElement(ρ0, c0, y_1, y_2, y_3, dA, nhat_1, nhat_2, nhat_3, f_1, f_2, f_3, fdot_1, fdot_2, fdot_3, τ)
+    y0dot = @SVector [y_1, y_2, y_3]
+    Ty = eltype(y0dot)
+    y1dot = @SVector zeros(Ty, 3)
+    y2dot = @SVector zeros(Ty, 3)
+
+    nhat = @SVector [nhat_1, nhat_2, nhat_3]
+    Tnhat = eltype(nhat)
+    nhatdot = @SVector zeros(Tnhat, 3)
+
+    f0dot = @SVector [f_1, f_2, f_3]
+    f1dot = @SVector [fdot_1, fdot_2, fdot_3]
+
+    return ImpermeableNonCompactF1ASourceElement(ρ0, c0, y0dot, y1dot, y2dot, dA, nhat, nhatdot, f0dot, f1dot, τ)
 end
 
 """
@@ -129,6 +189,22 @@ function (trans::KinematicTransformation)(se::CompactF1ASourceElement)
 end
 
 """
+    (trans::KinematicTransformation)(se::ImpermeableNonCompactF1ASourceElement)
+
+Transform the position and forces of a source element according to the coordinate system transformation `trans`.
+"""
+function (trans::KinematicTransformation)(se::ImpermeableNonCompactF1ASourceElement)
+    linear_only = false
+    y0dot, y1dot, y2dot = trans(se.τ, se.y0dot, se.y1dot, se.y2dot, linear_only)
+
+    linear_only = true
+    nhat, nhatdot = trans(se.τ, se.nhat, se.nhatdot, linear_only)
+    f0dot, f1dot = trans(se.τ, se.f0dot, se.f1dot, linear_only)
+
+    return ImpermeableNonCompactF1ASourceElement(se.ρ0, se.c0, y0dot, y1dot, y2dot, se.dA, nhat, nhatdot, f0dot, f1dot, se.τ)
+end
+
+"""
 Output of the F1A calculation: the acoustic pressure value at time `t`, broken into monopole component `p_m` and
 dipole component `p_d`.
 """
@@ -137,7 +213,6 @@ struct F1AOutput{Tt,Tp_m,Tp_d}
     p_m::Tp_m
     p_d::Tp_d
 end
-
 
 """
     noise(se::CompactF1ASourceElement, obs::AbstractAcousticObserver, t_obs)
@@ -189,14 +264,14 @@ function noise(se::CompactF1ASourceElement, obs::AbstractAcousticObserver, t_obs
     C1A = R02*R11dotdot + R01*R01dot*R11dot
 
     # Monople acoustic pressure!
-    p_m = se.ρ0/(4.0*pi)*se.Λ*C1A*se.Δr
+    p_m = se.ρ0/(4*pi)*se.Λ*C1A*se.Δr
 
     # Dipole coefficients.
     D1A = R01*R11*rhat
     E1A = R01*(R11dot*rhat + R11*rhat1dot) + se.c0*R21*rhat
 
     # Dipole acoustic pressure!
-    p_d = (dot_cs_safe(se.f1dot, D1A) + dot_cs_safe(se.f0dot, E1A))*se.Δr/(4.0*pi*se.c0)
+    p_d = (dot_cs_safe(se.f1dot, D1A) + dot_cs_safe(se.f0dot, E1A))*se.Δr/(4*pi*se.c0)
 
     return F1AOutput(t_obs, p_m, p_d)
 end
@@ -213,6 +288,82 @@ function noise(se::CompactF1ASourceElement, obs::AbstractAcousticObserver)
 end
 
 """
+    noise(se::ImpermeableNonCompactF1ASourceElement, obs::AbstractAcousticObserver, t_obs)
+
+Calculate the acoustic pressure emitted by source element `se` and recieved by
+observer `obs` at time `t_obs`, returning an [`F1AOutput`](@ref) object.
+
+The correct value for `t_obs` can be found using [`adv_time`](@ref).
+"""
+function noise(se::ImpermeableNonCompactF1ASourceElement, obs::AbstractAcousticObserver, t_obs)
+    x_obs = obs(t_obs)
+
+    rv = x_obs .- se.y0dot
+    r = norm_cs_safe(rv)
+    rhat = rv/r
+    rv1dot = -se.y1dot
+    r1dot = dot_cs_safe(rhat, rv1dot)
+
+    rv2dot = -se.y2dot
+
+    # Need the source velocity normal to the surface, which is just this:
+    vn = dot_cs_safe(se.y1dot, nhat)
+    # Now we can get Q
+    Q = se.ρ0 * vn
+
+    # To get Qdot, we need to differentiate `Q = ρ0 * vn = ρ0 * dot(y1dot, nhat)`.
+    # So that's Qdot = ρ0 * vndot, where vndot = dot(y2dot, nhat) + dot(y1dot, nhatdot)
+    vndot = dot_cs_safe(se.y2dot, se.nhat) + dot_cs_safe(se.y1dot, se.nhatdot)
+    Qdot = se.ρ0 * vndot
+
+    Mr = dot_cs_safe(-rv1dot/se.c0, rhat)
+
+    rhat1dot = -1.0/(r*r)*r1dot*rv + 1.0/r*rv1dot
+    Mr1dot = (dot_cs_safe(rv2dot, rhat) + dot_cs_safe(rv1dot, rhat1dot))/(-se.c0)
+
+    # Rnm = r^(-n)*(1.0 - Mr)^(-m)
+    R10 = 1.0/r
+    R01 = 1.0/(1.0 - Mr)
+    R11 = R10*R01
+    R21 = R11*R10
+
+    # Rnm1dot = d/dt(Rnm) = (-n*R10*r1dot + m*R01*Mr1dot)*Rnm
+    R11dot = (-R10*r1dot + R01*Mr1dot)*R11
+
+    # Monopole coefficients.
+    A1 = R11
+    A1A = R01*A1
+    A1dot = R11dot
+    B1A = R01*A1dot
+
+    # Monople acoustic pressure!
+    p_m = (Qdot*A1A + Q*B1A)*se.dA/(4*pi)
+
+    # Dipole coefficients.
+    B1 = R11*rhat
+    C1A = R01*B1
+    B1dot = R11dot*rhat + R11*rhat1dot
+    C1 = se.c0*R21*rhat
+    D1A = R01*B1dot + C1
+
+    # Dipole acoustic pressure!
+    p_d = (dot_cs_safe(se.f1dot, C1A) + dot_cs_safe(se.f0dot, D1A))*se.dA/(4*pi*se.c0)
+
+    return F1AOutput(t_obs, p_m, p_d)
+end
+
+"""
+    noise(se::ImpermeableNonCompactF1ASourceElement, obs::AbstractAcousticObserver)
+
+Calculate the acoustic pressure emitted by source element `se` and recieved by
+observer `obs`, returning an [`F1AOutput`](@ref) object.
+"""
+function noise(se::ImpermeableNonCompactF1ASourceElement, obs::AbstractAcousticObserver)
+    t_obs = adv_time(se, obs)
+    return noise(se, obs, t_obs)
+end
+
+"""
     common_obs_time(apth::AbstractArray{<:F1AOutput}, period, n, axis=1)
 
 Return a suitable time range for the collection of F1A acoustic pressures in `apth`.
@@ -223,7 +374,7 @@ of time length `period`. `axis` indicates which axis of `apth` the time for a
 source varies.
 """
 function common_obs_time(apth, period, n, axis=1)
-    # Make a single field struct array that behaves like a time array. 4%-6%
+    # Make an array that behaves like a time array. 4%-6%
     # faster than creating the array with getproperty.
     t_obs = mapview(:t, apth)
 

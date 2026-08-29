@@ -1,12 +1,12 @@
 """
-    adv_time(se::AbstractCompactSourceElement, obs::AbstractAcousticObserver)
+    adv_time(se::AbstractSourceElement, obs::AbstractAcousticObserver)
 
 Calculate the time an acoustic wave emmited by source `se` at time `se.τ` is
 recieved by observer `obs`.
 """
-adv_time(se::AbstractCompactSourceElement, obs::AbstractAcousticObserver)
+adv_time(se::AbstractSourceElement, obs::AbstractAcousticObserver)
 
-function adv_time(se::AbstractCompactSourceElement, obs::StationaryAcousticObserver)
+function adv_time(se::AbstractSourceElement, obs::StationaryAcousticObserver)
     τ = source_time(se)
     rv = obs(τ) .- position(se)
     r = norm_cs_safe(rv)
@@ -14,7 +14,7 @@ function adv_time(se::AbstractCompactSourceElement, obs::StationaryAcousticObser
     return t
 end
 
-function adv_time(se::AbstractCompactSourceElement, obs::ConstVelocityAcousticObserver)
+function adv_time(se::AbstractSourceElement, obs::ConstVelocityAcousticObserver)
     # Source time of the source element.
     τ = source_time(se)
 
@@ -44,4 +44,3 @@ function adv_time(se::AbstractCompactSourceElement, obs::ConstVelocityAcousticOb
 
     return t
 end
-
