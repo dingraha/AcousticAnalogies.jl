@@ -32,7 +32,7 @@ include("boundary_layers.jl")
 export AbstractBoundaryLayer, TrippedN0012BoundaryLayer, UntrippedN0012BoundaryLayer
 
 include("f1a.jl")
-export CompactF1ASourceElement
+export CompactF1ASourceElement, ImpermeableNonCompactF1ASourceElement
 export F1AOutput, F1APressureTimeHistory
 export noise
 export common_obs_time

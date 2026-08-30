@@ -1,6 +1,9 @@
 module AdvancedTimeTests
 
 using AcousticAnalogies
+
+using ADTypes: ADTypes
+using ForwardDiff: ForwardDiff
 using LinearAlgebra: norm
 using NLsolve
 using StaticArrays
@@ -32,7 +35,7 @@ using Test
         R(t) = [t[1] - (se.τ + norm(obs(t[1]) .- se.y0dot)/se.c0)]
 
         # Solve the advanced time equation.
-        result = nlsolve(R, [1.0], autodiff=:forward)
+        result = nlsolve(R, [1.0], autodiff=ADTypes.AutoForwardDiff())
         if !converged(result)
             @error "nlsolve advanced time calculation did not converge:\n$(result)"
         end

@@ -307,7 +307,7 @@ function noise(se::ImpermeableNonCompactF1ASourceElement, obs::AbstractAcousticO
     rv2dot = -se.y2dot
 
     # Need the source velocity normal to the surface, which is just this:
-    vn = dot_cs_safe(se.y1dot, nhat)
+    vn = dot_cs_safe(se.y1dot, se.nhat)
     # Now we can get Q
     Q = se.ρ0 * vn
 
