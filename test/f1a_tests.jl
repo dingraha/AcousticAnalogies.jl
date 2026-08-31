@@ -97,11 +97,11 @@ end
     dt_curr = dt
     first_time = true
 
-    err_pm = []
-    err_pd = []
-    dts = []
-    ooa_pm = []
-    ooa_pd = []
+    err_pm = Vector{Float64}()
+    err_pd = Vector{Float64}()
+    dts = Vector{Float64}()
+    ooa_pm = Vector{Float64}()
+    ooa_pd = Vector{Float64}()
     for n in 1:7
         τ_1, pmi_1, pdiff_1, pdinf_1 = cf1_integrand(sef1, obs, t-dt_curr)
         τ1, pmi1, pdiff1, pdinf1 = cf1_integrand(sef1, obs, t+dt_curr)
@@ -209,11 +209,16 @@ end
     fn = 180.66763939805125
     fc = 19.358679206883078
     # For the impermiable case, we just need the position through acceleration, and the loading and its time derivative.
-    y0dot(τ) = [0,  radii*cos(omega*τ), radii*sin(omega*τ)]
-    y1dot(τ) = [0, -omega*radii*sin(omega*τ), omega*radii*cos(omega*τ)]
-    y2dot(τ) = [0, -omega^2*radii*cos(omega*τ), -omega^2*radii*sin(omega*τ)]
-    f0dot(τ) = [-fn, -sin(omega*τ)*fc, cos(omega*τ)*fc]
-    f1dot(τ) = [0, -omega*cos(omega*τ)*fc, -omega*sin(omega*τ)*fc]
+    # y0dot(τ) = [0,  radii*cos(omega*τ), radii*sin(omega*τ)]
+    # y1dot(τ) = [0, -omega*radii*sin(omega*τ), omega*radii*cos(omega*τ)]
+    # y2dot(τ) = [0, -omega^2*radii*cos(omega*τ), -omega^2*radii*sin(omega*τ)]
+    y0dot(τ) = [0.1*radii*sin(omega*τ),  radii*cos(omega*τ), radii*sin(omega*τ)]
+    y1dot(τ) = [0.1*radii*omega*cos(omega*τ), -omega*radii*sin(omega*τ), omega*radii*cos(omega*τ)]
+    y2dot(τ) = [-0.1*radii*omega^2*sin(omega*τ), -omega^2*radii*cos(omega*τ), -omega^2*radii*sin(omega*τ)]
+    # f0dot(τ) = [-fn, -sin(omega*τ)*fc, cos(omega*τ)*fc]
+    # f1dot(τ) = [0, -omega*cos(omega*τ)*fc, -omega*sin(omega*τ)*fc]
+    f0dot(τ) = [-fn*cos(omega*τ), -sin(omega*τ)*fc, cos(omega*τ)*fc]
+    f1dot(τ) = [fn*omega*sin(omega*τ), -omega*cos(omega*τ)*fc, -omega*sin(omega*τ)*fc]
     # But we also need the unit normal, etc..
     # What should the unit normal be?
     # Doesn't really need to be realistic.
@@ -221,8 +226,13 @@ end
     # Also, I'm not sure if I can arbitrarily mess with the normal vector and not do something with the position, velocity, etc.. of the source element and expect F1A to be consistent with F1.
     # Need to think about that.
     # But at least this case works.
-    nhat(τ) = [1.0, -sin(omega*τ), cos(omega*τ)]./sqrt(1 + 1)
-    nhatdot(τ) = [0.0, -omega*cos(omega*τ), -omega*sin(omega*τ)]./sqrt(1 + 1)
+    # No, that's all completely wrong---nhat and the position, etc are all independent.
+    # I was forgetting about the quotient rule when writing down `nhatdot`, lol.
+    # nhat(τ) = [1.0, -sin(omega*τ), cos(omega*τ)]./sqrt(1 + 1)
+    # nhatdot(τ) = [0.0, -omega*cos(omega*τ), -omega*sin(omega*τ)]./sqrt(1 + 1)
+    nhat(τ) = [τ^2, -sin(omega*τ), cos(omega*τ)]./sqrt(τ^2 + 1)
+    # nhatdot(τ) = [2*τ, -omega*cos(omega*τ), -omega*sin(omega*τ)]./sqrt(τ^2 + 1)
+    nhatdot(τ) = ([2*τ, -omega*cos(omega*τ), -omega*sin(omega*τ)].*sqrt(τ^2 + 1) - [τ^2, -sin(omega*τ), cos(omega*τ)].*(0.5*(τ^2 + 1)^(-0.5)*(2*τ)))./(τ^2 + 1)
     # I guess we need an area too.
     dA = 0.2
     t = 0.0 + 0.65*period
@@ -240,11 +250,11 @@ end
     dt_curr = dt
     first_time = true
 
-    err_pm = []
-    err_pd = []
-    dts = []
-    ooa_pm = []
-    ooa_pd = []
+    err_pm = Vector{Float64}()
+    err_pd = Vector{Float64}()
+    dts = Vector{Float64}()
+    ooa_pm = Vector{Float64}()
+    ooa_pd = Vector{Float64}()
     for n in 1:7
         τ_1, pmi_1, pdiff_1, pdinf_1 = if1_integrand(sef1, obs, t-dt_curr)
         τ1, pmi1, pdiff1, pdinf1 = if1_integrand(sef1, obs, t+dt_curr)
